@@ -3,90 +3,125 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Libby CSV Cleaner (Native)</title>
+    <title>Libby CSV Cleaner + Preview</title>
     <style>
         :root { --accent: #377458; --bg: #f4f7f6; }
-        body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; }
-        .card { background: white; padding: 2rem; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.1); width: 100%; max-width: 400px; text-align: center; }
-        h2 { color: var(--accent); margin-top: 0; }
-        p { color: #666; font-size: 0.9rem; line-height: 1.4; }
-        input[type="file"] { width: 100%; margin: 20px 0; padding: 10px; border: 2px dashed #ccc; border-radius: 8px; box-sizing: border-box; }
+        body { font-family: -apple-system, sans-serif; background: var(--bg); display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
+        .card { background: white; padding: 1.5rem; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.1); width: 100%; max-width: 500px; text-align: center; }
+        h2 { color: var(--accent); margin-bottom: 5px; }
+        p { font-size: 0.85rem; color: #666; margin-bottom: 20px; }
+        input[type="file"] { width: 100%; margin-bottom: 15px; }
         button { width: 100%; background: var(--accent); color: white; border: none; padding: 15px; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; }
-        button:active { transform: scale(0.98); }
-        #status { margin-top: 15px; font-weight: bold; color: #2e7d32; }
+        
+        /* Preview Table Styles */
+        .preview-container { margin-top: 25px; text-align: left; display: none; }
+        .preview-title { font-size: 0.9rem; font-weight: bold; color: #333; margin-bottom: 8px; border-bottom: 2px solid var(--accent); display: inline-block; }
+        .table-wrapper { overflow-x: auto; border: 1px solid #eee; border-radius: 8px; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.75rem; background: #fff; }
+        th { background: #f8f9fa; font-weight: bold; border-bottom: 1px solid #ddd; }
+        th, td { padding: 8px; text-align: left; border-right: 1px solid #eee; white-space: nowrap; }
+        #status { margin-top: 15px; font-weight: bold; color: #2e7d32; font-size: 0.9rem; }
     </style>
 </head>
 <body>
 
 <div class="card">
     <h2>Libby Cleaner</h2>
-    <p>Removes <b>Cover</b> & <b>Library</b> columns.<br>Renames <b>Timestamp</b> to <b>Date Read</b>.</p>
+    <p>Removes Cover/Library & renames Timestamp.</p>
     
     <input type="file" id="fileInput" accept=".csv">
-    <button onclick="processCSV()">Clean & Save CSV</button>
+    <button onclick="processCSV()">Clean & Preview</button>
     
     <div id="status"></div>
+
+    <div id="previewContainer" class="preview-container">
+        <span class="preview-title">Preview (First 3 Rows)</span>
+        <div class="table-wrapper">
+            <table id="previewTable">
+                <thead><tr id="tableHead"></tr></thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
+    </div>
 </div>
 
 <script>
 function processCSV() {
     const fileInput = document.getElementById('fileInput');
     const status = document.getElementById('status');
+    const previewContainer = document.getElementById('previewContainer');
+    const tableHead = document.getElementById('tableHead');
+    const tableBody = document.getElementById('tableBody');
+    
     const file = fileInput.files[0];
-
-    if (!file) {
-        alert("Please select a Libby CSV file first.");
-        return;
-    }
+    if (!file) return alert("Select a file first.");
 
     const reader = new FileReader();
     reader.onload = function(e) {
         const text = e.target.result;
-        const rows = text.split(/\r?\n/);
-        if (rows.length === 0) return;
-
-        // 1. Process Headers
-        let headers = rows[0].split(',');
+        // Split rows and handle potential quoted commas (simplified)
+        const rows = text.split(/\r?\n/).filter(row => row.trim() !== "");
         
-        // Find indices of columns to remove/rename
-        const coverIdx = headers.findIndex(h => h.trim().toLowerCase() === 'cover');
-        const libraryIdx = headers.findIndex(h => h.trim().toLowerCase() === 'library');
-        const timestampIdx = headers.findIndex(h => h.trim().toLowerCase() === 'timestamp');
+        const cleanHeader = (str) => str.replace(/["']/g, "").trim().toLowerCase();
 
-        // Rename Timestamp to Date Read in the header array
-        if (timestampIdx !== -1) headers[timestampIdx] = "Date Read";
+        let rawHeaders = rows[0].split(',');
+        const coverIdx = rawHeaders.findIndex(h => cleanHeader(h) === 'cover');
+        const libraryIdx = rawHeaders.findIndex(h => cleanHeader(h) === 'library');
+        const timestampIdx = rawHeaders.findIndex(h => cleanHeader(h) === 'timestamp');
 
-        // 2. Process all rows
-        const cleanedRows = rows.map((row, rowIdx) => {
+        // Transform data
+        const cleanedData = rows.map((row, index) => {
             let columns = row.split(',');
             
-            // If the row is empty or doesn't match header length, skip or return as is
-            if (columns.length < headers.length && rowIdx !== 0) return null;
+            // Rebuild row skipping columns
+            let filtered = columns.filter((_, colIdx) => colIdx !== coverIdx && colIdx !== libraryIdx);
+            
+            // Rename header in the first row
+            if (index === 0 && timestampIdx !== -1) {
+                const newTimestampIdx = filtered.findIndex(h => cleanHeader(h) === 'timestamp');
+                if (newTimestampIdx !== -1) filtered[newTimestampIdx] = "Date Read";
+            }
+            return filtered;
+        });
 
-            // Filter out the columns by index
-            return columns.filter((_, colIdx) => {
-                return colIdx !== coverIdx && colIdx !== libraryIdx;
-            }).join(',');
-        }).filter(row => row !== null);
+        // 1. Show Preview Table
+        tableHead.innerHTML = "";
+        tableBody.innerHTML = "";
+        
+        // Populate Header
+        cleanedData[0].forEach(h => {
+            let th = document.createElement('th');
+            th.innerText = h.replace(/["']/g, "");
+            tableHead.appendChild(th);
+        });
 
-        // 3. Create the new CSV string
-        const finalCsv = cleanedRows.join('\n');
+        // Populate first 3 rows
+        for (let i = 1; i < Math.min(cleanedData.length, 4); i++) {
+            let tr = document.createElement('tr');
+            cleanedData[i].forEach(cell => {
+                let td = document.createElement('td');
+                td.innerText = cell.replace(/["']/g, "");
+                tr.appendChild(td);
+            });
+            tableBody.appendChild(tr);
+        }
+
+        previewContainer.style.display = "block";
+
+        // 2. Trigger Download
+        const finalCsv = cleanedData.map(r => r.join(',')).join('\n');
         downloadCSV(finalCsv);
-        status.innerText = "✓ Cleaned file downloaded!";
+        status.innerText = "✓ Cleaned & Downloaded!";
     };
-
     reader.readAsText(file);
 }
 
 function downloadCSV(content) {
     const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.setAttribute("href", url);
+    link.setAttribute("href", URL.createObjectURL(blob));
     link.setAttribute("download", "libby_cleaned.csv");
-    document.body.appendChild(link);
     link.click();
-    document.body.removeChild(link);
 }
 </script>
 
