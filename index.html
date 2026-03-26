@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Libby CSV Cleaner</title>
+    <title>Libby-to-Goodreads CSV Cleaner</title>
     <style>
         :root { --accent: #377458; --bg: #f4f7f6; }
         body { font-family: -apple-system, sans-serif; background: var(--bg); display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
@@ -21,8 +21,8 @@
 <body>
 
 <div class="card">
-    <h2>Libby Cleaner</h2>
-    <p>Remove "cover" column and rename "timestamp" column to "date read".</p>
+    <h2>Libby-to-Goodreads CSV Cleaner</h2>
+    <p>Remove the “cover” column from a Libby tag export CSV file, rename the “timestamp” column to “date read”, and save.</p>
     
     <input type="file" id="fileInput" accept=".csv">
     <button onclick="processCSV()">Clean & Save File</button>
