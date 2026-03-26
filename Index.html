@@ -3,86 +3,87 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Libby Export Cleaner</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <title>Libby CSV Cleaner (Native)</title>
     <style>
-        body { font-family: sans-serif; background: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 100%; max-width: 400px; text-align: center; }
-        h2 { color: #2c3e50; margin-bottom: 20px; }
-        .file-input { margin-bottom: 20px; border: 2px dashed #cbd5e0; padding: 20px; border-radius: 8px; cursor: pointer; }
-        button { background: #4a90e2; color: white; border: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; width: 100%; }
-        button:hover { background: #357abd; }
-        .status { margin-top: 15px; font-size: 0.9rem; color: #666; }
+        :root { --accent: #377458; --bg: #f4f7f6; }
+        body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; }
+        .card { background: white; padding: 2rem; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.1); width: 100%; max-width: 400px; text-align: center; }
+        h2 { color: var(--accent); margin-top: 0; }
+        p { color: #666; font-size: 0.9rem; line-height: 1.4; }
+        input[type="file"] { width: 100%; margin: 20px 0; padding: 10px; border: 2px dashed #ccc; border-radius: 8px; box-sizing: border-box; }
+        button { width: 100%; background: var(--accent); color: white; border: none; padding: 15px; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; }
+        button:active { transform: scale(0.98); }
+        #status { margin-top: 15px; font-weight: bold; color: #2e7d32; }
     </style>
 </head>
 <body>
 
 <div class="card">
-    <h2>Libby Export Cleaner</h2>
-    <p>Upload your Libby CSV to remove extra columns and rename the timestamp.</p>
+    <h2>Libby Cleaner</h2>
+    <p>Removes <b>Cover</b> & <b>Library</b> columns.<br>Renames <b>Timestamp</b> to <b>Date Read</b>.</p>
     
-    <input type="file" id="libbyFile" accept=".csv" class="file-input">
+    <input type="file" id="fileInput" accept=".csv">
+    <button onclick="processCSV()">Clean & Save CSV</button>
     
-    <button onclick="cleanLibbyData()">Clean & Save File</button>
-    
-    <div id="status" class="status"></div>
+    <div id="status"></div>
 </div>
 
 <script>
-function cleanLibbyData() {
-    const fileInput = document.getElementById('libbyFile');
+function processCSV() {
+    const fileInput = document.getElementById('fileInput');
     const status = document.getElementById('status');
+    const file = fileInput.files[0];
 
-    if (!fileInput.files[0]) {
+    if (!file) {
         alert("Please select a Libby CSV file first.");
         return;
     }
 
-    Papa.parse(fileInput.files[0], {
-        header: true,
-        skipEmptyLines: true,
-        complete: function(results) {
-            let data = results.data;
-            
-            // Transform the data
-            const cleanedData = data.map(row => {
-                // 1. Create a copy of the row
-                let newRow = { ...row };
-                
-                // 2. Remove "Cover" and "Library" (case-insensitive check)
-                delete newRow['Cover'];
-                delete newRow['cover'];
-                delete newRow['Library'];
-                delete newRow['library'];
-                
-                // 3. Change "Timestamp" to "Date Read"
-                if (newRow.hasOwnProperty('Timestamp')) {
-                    newRow['Date Read'] = newRow['Timestamp'];
-                    delete newRow['Timestamp'];
-                } else if (newRow.hasOwnProperty('timestamp')) {
-                    newRow['Date Read'] = newRow['timestamp'];
-                    delete newRow['timestamp'];
-                }
-                
-                return newRow;
-            });
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const text = e.target.result;
+        const rows = text.split(/\r?\n/);
+        if (rows.length === 0) return;
 
-            // Convert back to CSV
-            const finalCsv = Papa.unparse(cleanedData);
+        // 1. Process Headers
+        let headers = rows[0].split(',');
+        
+        // Find indices of columns to remove/rename
+        const coverIdx = headers.findIndex(h => h.trim().toLowerCase() === 'cover');
+        const libraryIdx = headers.findIndex(h => h.trim().toLowerCase() === 'library');
+        const timestampIdx = headers.findIndex(h => h.trim().toLowerCase() === 'timestamp');
+
+        // Rename Timestamp to Date Read in the header array
+        if (timestampIdx !== -1) headers[timestampIdx] = "Date Read";
+
+        // 2. Process all rows
+        const cleanedRows = rows.map((row, rowIdx) => {
+            let columns = row.split(',');
             
-            // Trigger Download
-            downloadFile(finalCsv);
-            status.innerText = "Processing complete! Your file has been saved.";
-        }
-    });
+            // If the row is empty or doesn't match header length, skip or return as is
+            if (columns.length < headers.length && rowIdx !== 0) return null;
+
+            // Filter out the columns by index
+            return columns.filter((_, colIdx) => {
+                return colIdx !== coverIdx && colIdx !== libraryIdx;
+            }).join(',');
+        }).filter(row => row !== null);
+
+        // 3. Create the new CSV string
+        const finalCsv = cleanedRows.join('\n');
+        downloadCSV(finalCsv);
+        status.innerText = "✓ Cleaned file downloaded!";
+    };
+
+    reader.readAsText(file);
 }
 
-function downloadFile(csvContent) {
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+function downloadCSV(content) {
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", "cleaned_libby_export.csv");
+    link.setAttribute("download", "libby_cleaned.csv");
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
