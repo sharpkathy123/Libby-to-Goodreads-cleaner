@@ -7,18 +7,23 @@
     <style>
         :root { --accent: #377458; --bg: #f4f7f6; }
         body { font-family: -apple-system, sans-serif; background: var(--bg); display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
-        .card { background: white; padding: 2rem; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.1); width: 100%; max-width: 400px; text-align: center; }
-        h2 { color: var(--accent); margin-bottom: 20px; }
-        input[type="file"] { width: 100%; margin-bottom: 20px; }
-        button { width: 100%; background: var(--accent); color: white; border: none; padding: 15px; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; }
+        .card { background: white; padding: 2.2rem; border-radius: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.1); width: 100%; max-width: 420px; text-align: center; }
+        h2 { color: var(--accent); margin-bottom: 10px; letter-spacing: -0.5px; }
+        p { color: #666; font-size: 0.9rem; margin-bottom: 25px; }
+        input[type="file"] { width: 100%; margin-bottom: 20px; font-size: 0.9rem; }
+        button { width: 100%; background: var(--accent); color: white; border: none; padding: 16px; border-radius: 10px; font-size: 1rem; font-weight: bold; cursor: pointer; transition: background 0.2s; }
+        button:hover { background: #2a5a44; }
         #status { margin-top: 15px; font-weight: bold; color: #2e7d32; }
-        .next-step { margin-top: 20px; display: none; padding: 15px; background: #e8f5e9; border-radius: 8px; text-decoration: none; color: #1b5e20; font-weight: bold; border: 1px solid #c8e6c9; }
+        .next-step { margin-top: 25px; display: none; padding: 18px; background: #e8f5e9; border-radius: 10px; text-decoration: none; color: #1b5e20; font-weight: bold; border: 1px solid #c8e6c9; animation: fadeIn 0.5s; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body>
 
 <div class="card">
     <h2>Libby Cleaner</h2>
+    <p>Fixing column alignment & renaming Timestamp.</p>
+    
     <input type="file" id="fileInput" accept=".csv">
     <button onclick="processCSV()">Clean & Save File</button>
     
@@ -30,6 +35,14 @@
 </div>
 
 <script>
+// This function splits CSV rows correctly even if commas are inside quotes
+function splitCSV(row) {
+    const regex = /(".*?"|[^",\s]+)(?=\s*,|\s*$)/g;
+    // Fallback for more complex quote scenarios
+    const matches = row.match(/(".*?"|[^,]+)/g);
+    return matches ? matches.map(m => m.trim()) : [];
+}
+
 function processCSV() {
     const fileInput = document.getElementById('fileInput');
     const status = document.getElementById('status');
@@ -42,17 +55,26 @@ function processCSV() {
         const text = e.target.result;
         const rows = text.split(/\r?\n/).filter(row => row.trim() !== "");
         
-        const rawHeaders = rows[0].split(',');
-        const coverIdx = rawHeaders.findIndex(h => h.replace(/["']/g, "").trim().toLowerCase() === 'cover');
-        const timestampIdx = rawHeaders.findIndex(h => h.replace(/["']/g, "").trim().toLowerCase() === 'timestamp');
+        // 1. Process Header to find indices
+        const headerRow = splitCSV(rows[0]);
+        const clean = (s) => s.replace(/["']/g, "").trim().toLowerCase();
+        
+        const coverIdx = headerRow.findIndex(h => clean(h) === 'cover');
+        const timestampIdx = headerRow.findIndex(h => clean(h) === 'timestamp');
 
         const cleanedRows = rows.map((row, rowIndex) => {
-            let cols = row.split(',');
-            if (rowIndex === 0 && timestampIdx !== -1) cols[timestampIdx] = "Date Read";
-
-            if (coverIdx !== -1) {
-                return cols.filter((_, colIdx) => colIdx !== coverIdx).join(',');
+            let cols = splitCSV(row);
+            
+            // Rename Timestamp in header
+            if (rowIndex === 0 && timestampIdx !== -1) {
+                cols[timestampIdx] = "Date Read";
             }
+
+            // Remove Cover column if it exists
+            if (coverIdx !== -1) {
+                cols.splice(coverIdx, 1);
+            }
+            
             return cols.join(',');
         });
 
@@ -60,11 +82,11 @@ function processCSV() {
         const blob = new Blob([finalCsv], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement("a");
         link.setAttribute("href", URL.createObjectURL(blob));
-        link.setAttribute("download", "libby_cleaned.csv");
+        link.setAttribute("download", "libby_fixed.csv");
         link.click();
         
-        status.innerText = "✓ Cleaned file saved!";
-        grLink.style.display = "block"; // Show the Goodreads button
+        status.innerText = "✓ Alignment Fixed!";
+        grLink.style.display = "block";
     };
     reader.readAsText(fileInput.files[0]);
 }
